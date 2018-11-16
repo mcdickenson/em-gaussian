@@ -1,21 +1,16 @@
 # http://pyro.ai/examples/gmm.html
 
-from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from torch.distributions import constraints
-from matplotlib import pyplot
-from matplotlib.patches import Ellipse
-from scipy.stats import norm
-
 import pyro
 import pyro.distributions as dist
+import torch
 
+from matplotlib.patches import Ellipse
 from pyro import poutine
 from pyro.contrib.autoguide import AutoDelta
-from pyro.optim import Adam
 from pyro.infer import SVI, TraceEnum_ELBO, config_enumerate
+from torch.distributions import constraints
 
 
 @config_enumerate(default='parallel')
@@ -32,8 +27,7 @@ def model(data):
         assignment = assignment.to(torch.int64)
         scales_assignment = scales[torch.stack((assignment*2, assignment*2 + 1))].transpose(1, 0)
         scales_assignment = torch.stack([torch.diag(s) for s in scales_assignment])
-        locs_assignment = locs[assignment]
-        obs = pyro.sample('obs', dist.MultivariateNormal(locs[assignment], scales_assignment), obs=data)
+        pyro.sample('obs', dist.MultivariateNormal(locs[assignment], scales_assignment), obs=data)
 
 
 @config_enumerate(default="parallel")
@@ -61,7 +55,7 @@ def initialize(data):
     pyro.param('auto_scale', torch.tensor([var]*4), constraint=constraints.positive)
 
     # Initialize means from a subsample of data.
-    pyro.param('auto_locs', data[torch.multinomial(torch.ones(len(data)) / len(data), K)]);
+    pyro.param('auto_locs', data[torch.multinomial(torch.ones(len(data)) / len(data), K)])
 
     loss = svi.loss(model, full_guide, data)
 
@@ -74,10 +68,10 @@ def get_samples():
     # 2 clusters
     # note that both covariance matrices are diagonal
     mu1 = torch.tensor([0., 5.])
-    sig1 = torch.tensor([ [2., 0.], [0., 3.] ])
+    sig1 = torch.tensor([[2., 0.], [0., 3.]])
 
     mu2 = torch.tensor([5., 0.])
-    sig2 = torch.tensor([ [4., 0.], [0., 1.] ])
+    sig2 = torch.tensor([[4., 0.], [0., 1.]])
 
     # generate samples
     dist1 = dist.MultivariateNormal(mu1, sig1)
@@ -118,14 +112,15 @@ def plot(data, mus=None, sigmas=None, colors='black', figname='fig.png'):
             lam, v = np.linalg.eig(cov)
             lam = np.sqrt(lam)
             ell = Ellipse(xy=(x[sig_ix], y[sig_ix]),
-                        width=lam[0]*j*2, height=lam[1]*j*2,
-                        angle=np.rad2deg(np.arccos(v[0, 0])),
-                        color='blue')
+                          width=lam[0]*j*2, height=lam[1]*j*2,
+                          angle=np.rad2deg(np.arccos(v[0, 0])),
+                          color='blue')
             ell.set_facecolor('none')
             ax.add_artist(ell)
 
     # Save figure
     fig.savefig(figname)
+
 
 if __name__ == "__main__":
     pyro.enable_validation(True)
