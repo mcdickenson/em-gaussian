@@ -1,17 +1,19 @@
 # http://pyro.ai/examples/gmm.html
 
 from collections import defaultdict
+import matplotlib.pyplot as plt
 import numpy as np
-import random as rand
-import scipy.stats
 import torch
 from torch.distributions import constraints
 from matplotlib import pyplot
+from matplotlib.patches import Ellipse
+from scipy.stats import norm
 
 import pyro
 import pyro.distributions as dist
+
 from pyro import poutine
-from pyro.contrib.autoguide import AutoDelta, AutoMultivariateNormal, AutoLowRankMultivariateNormal
+from pyro.contrib.autoguide import AutoDelta
 from pyro.optim import Adam
 from pyro.infer import SVI, TraceEnum_ELBO, config_enumerate
 
@@ -88,6 +90,43 @@ def get_samples():
     return data
 
 
+def plot(data, mus=None, sigmas=None, colors='black', figname='fig.png'):
+    # Create figure
+    fig = plt.figure()
+
+    # Plot data
+    x = data[:, 0]
+    y = data[:, 1]
+    plt.scatter(x, y, 24, c=colors)
+
+    # Plot cluster centers
+    if mus is not None:
+        x = [float(m[0]) for m in mus]
+        y = [float(m[1]) for m in mus]
+        # import pdb; pdb.set_trace()
+        plt.scatter(x, y, 99, c='red')
+
+    # Plot ellipses for each cluster
+    if sigmas is not None:
+        for sig_ix in range(K):
+            ax = fig.gca()
+            j = 2
+            cov = np.zeros((2, 2))
+            cov[0, 0] = float(sigmas[sig_ix*K])
+            cov[1, 1] = float(sigmas[sig_ix*K+1])
+
+            lam, v = np.linalg.eig(cov)
+            lam = np.sqrt(lam)
+            ell = Ellipse(xy=(x[sig_ix], y[sig_ix]),
+                        width=lam[0]*j*2, height=lam[1]*j*2,
+                        angle=np.rad2deg(np.arccos(v[0, 0])),
+                        color='blue')
+            ell.set_facecolor('none')
+            ax.add_artist(ell)
+
+    # Save figure
+    fig.savefig(figname)
+
 if __name__ == "__main__":
     pyro.enable_validation(True)
     pyro.set_rng_seed(42)
@@ -101,13 +140,23 @@ if __name__ == "__main__":
     global_guide = config_enumerate(global_guide, 'parallel')
     _, svi = initialize(data)
 
-    for i in range(250):
+    true_colors = [0] * 100 + [1] * 100
+    plot(data, colors=true_colors, figname='pyro_init.png')
+
+    for i in range(151):
         svi.step(data)
 
-        if i % 150 == 0:
-            print("locs: {}".format(pyro.param('locs')))
-            print("scales: {}".format(pyro.param('scales')))
-            print('weights = {}'.format(pyro.param('weights')))
-            print('assignments: {}'.format(pyro.param('assignment_probs')))
+        if i % 50 == 0:
+            locs = pyro.param('locs')
+            scales = pyro.param('scales')
+            weights = pyro.param('weights')
+            assignment_probs = pyro.param('assignment_probs')
 
-    # todo plot data and estimates
+            print("locs: {}".format(locs))
+            print("scales: {}".format(scales))
+            print('weights = {}'.format(weights))
+            print('assignments: {}'.format(assignment_probs))
+
+            # todo plot data and estimates
+            assignments = np.uint8(np.round(assignment_probs.data))
+            plot(data, locs.data, scales.data, assignments, figname='pyro_iteration{}.png'.format(i))
