@@ -18,16 +18,13 @@ from torch.distributions import constraints
 def model(data):
     # Global variables.
     weights = pyro.param('weights', torch.FloatTensor([0.5]), constraint=constraints.unit_interval)
-    scales = pyro.param('scales', torch.FloatTensor([2., 3., 4., 5.]), constraint=constraints.positive)
+    scales = pyro.param('scales', torch.tensor([[[1., 0.], [0., 2.]], [[3., 0.], [0., 4.]]]), constraint=constraints.positive)
     locs = pyro.param('locs', torch.tensor([[1., 2.], [3., 4.]]))
 
     with pyro.iarange('data', data.size(0)):
         # Local variables.
-        assignment = pyro.sample('assignment', dist.Bernoulli(torch.ones(len(data)) * weights))
-        assignment = assignment.to(torch.int64)
-        scales_assignment = scales[torch.stack((assignment*2, assignment*2 + 1))].transpose(1, 0)
-        scales_assignment = torch.stack([torch.diag(s) for s in scales_assignment])
-        pyro.sample('obs', dist.MultivariateNormal(locs[assignment], scales_assignment), obs=data)
+        assignment = pyro.sample('assignment', dist.Bernoulli(torch.ones(len(data)) * weights)).to(torch.int64)
+        pyro.sample('obs', dist.MultivariateNormal(locs[assignment], scales[assignment]), obs=data)
 
 
 @config_enumerate(default="parallel")
@@ -97,22 +94,17 @@ def plot(data, mus=None, sigmas=None, colors='black', figname='fig.png'):
     if mus is not None:
         x = [float(m[0]) for m in mus]
         y = [float(m[1]) for m in mus]
-        # import pdb; pdb.set_trace()
         plt.scatter(x, y, 99, c='red')
 
     # Plot ellipses for each cluster
     if sigmas is not None:
         for sig_ix in range(K):
             ax = fig.gca()
-            j = 2
-            cov = np.zeros((2, 2))
-            cov[0, 0] = float(sigmas[sig_ix*K])
-            cov[1, 1] = float(sigmas[sig_ix*K+1])
-
+            cov = np.array(sigmas[sig_ix])
             lam, v = np.linalg.eig(cov)
             lam = np.sqrt(lam)
             ell = Ellipse(xy=(x[sig_ix], y[sig_ix]),
-                          width=lam[0]*j*2, height=lam[1]*j*2,
+                          width=lam[0]*4, height=lam[1]*4,
                           angle=np.rad2deg(np.arccos(v[0, 0])),
                           color='blue')
             ell.set_facecolor('none')
